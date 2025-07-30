@@ -216,18 +216,16 @@ async def show_tariffs(call: CallbackQuery, state: FSMContext):
         )
 
     markup = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="✉️ Telegram orqali", url=f"https://t.me/{tg_username.lstrip('@')}")
-            ],
-            [
-                InlineKeyboardButton(text="📞 Qo‘ng‘iroq qilish", url=f"tel:{telephone_number}")
-            ],
-            [
-                InlineKeyboardButton(text="🔙 Provayderlar", callback_data="back_providers")
-            ]
+    inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✉️ Telegram orqali", url=f"https://t.me/{tg_username.lstrip('@')}")
+        ],
+        [
+            InlineKeyboardButton(text="🔙 Provayderlar", callback_data="back_providers")
         ]
-    )
+    ]
+)
+
 
     await call.message.edit_text(f"<b>📡 {name}</b>\n\n{tariflar}", reply_markup=markup, parse_mode="HTML")
 
