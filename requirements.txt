@@ -2,4 +2,3 @@ aiogram
 aiohttp
 pydantic
 python-dotenv
-beautifulsoup4
