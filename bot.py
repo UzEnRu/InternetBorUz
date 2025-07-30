@@ -2,7 +2,7 @@ import json
 import logging
 import asyncio
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import Message, KeyboardButton, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.enums import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -14,25 +14,22 @@ from config import BOT_TOKEN
 # Log
 logging.basicConfig(level=logging.INFO)
 
-# Bot & Dispatcher
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher(storage=MemoryStorage())
 
-# Fayldan joylashuvlarni yuklaymiz
 with open("locations.json", "r", encoding="utf-8") as f:
     locations = json.load(f)
 
-# Sahifa hajmi
 PAGE_SIZE = 10
 
-# Holatlar
 class LocationStates(StatesGroup):
     City = State()
     District = State()
     Street = State()
     House = State()
+    Provider = State()
 
-# 🔄 Sahifalash uchun yordamchi
+
 def paginate_keyboard(items, state_key, page):
     start = page * PAGE_SIZE
     end = start + PAGE_SIZE
@@ -149,7 +146,7 @@ async def choose_house(msg: Message, state: FSMContext):
     await msg.answer("Ko‘cha tanlang:", reply_markup=keyboard)
 
 @dp.message(LocationStates.House)
-async def check_provider(msg: Message, state: FSMContext):
+async def list_providers(msg: Message, state: FSMContext):
     if msg.text == "🔙 Orqaga":
         data = await state.get_data()
         city = data["city"]
@@ -161,18 +158,14 @@ async def check_provider(msg: Message, state: FSMContext):
         return
 
     data = await state.get_data()
-    city = data["city"]
-    district = data["district"]
-    street = data["street"]
-    house = msg.text
-
+    await state.update_data(house=msg.text)
     await msg.answer("🔍 Provayderlar qidirilmoqda...")
 
     params = {
-        "city": city,
-        "district": district,
-        "street": street,
-        "house": house
+        "city": data["city"],
+        "district": data["district"],
+        "street": data["street"],
+        "house": msg.text
     }
 
     async with ClientSession() as session:
@@ -181,46 +174,69 @@ async def check_provider(msg: Message, state: FSMContext):
                 if resp.status != 200:
                     await msg.answer("❌ API javobida xatolik. Qayta urinib ko‘ring.")
                     return
-
                 res = await resp.json()
                 providers = res.get("providers", [])
                 if not providers:
                     await msg.answer("❌ Hech qanday provayder topilmadi.")
                     return
 
-                for provider in providers:
-                    name = provider.get("provider_name", "Nomaʼlum")
-                    logo = provider.get("provider_logo", None)
-
-                    tariflar = ""
-                    for tarif in provider.get("provider_best", []):
-                        nomi = tarif.get("plan_name", "—")
-                        tezlik = tarif.get("plan_speed", "—")
-                        narx = tarif.get("plan_price", "—")
-                        tur = tarif.get("plan_type", "—")
-                        tungi = tarif.get("night_speed", "—")
-                        limit = tarif.get("plan_limit", "—")
-
-                        tariflar += (
-                            f"<b>{nomi}</b>\n"
-                            f"🌐 Tezlik: <b>{tezlik}</b>\n"
-                            f"🌙 Tungi: <i>{tungi}</i>\n"
-                            f"💸 Narx: <code>{narx} so‘m/oy</code>\n"
-                            f"📶 Limit: {limit}\n"
-                            f"📡 Turi: {tur}\n\n"
-                        )
-
-                    header = f"<u>📡 <b>{name}</b></u>\n"
-                    if logo:
-                        header += f"🖼 <i>Logo:</i> <code>{logo}</code>\n\n"
-
-                    await msg.answer(header + tariflar, parse_mode="HTML")
+                keyboard = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [InlineKeyboardButton(text=prov.get("provider_name", "Nomaʼlum"), callback_data=f"prov_{i}")]
+                        for i, prov in enumerate(providers)
+                    ] + [[InlineKeyboardButton(text="🔙 Orqaga", callback_data="back_house")]]
+                )
+                await state.update_data(provider_data=providers)
+                await state.set_state(LocationStates.Provider)
+                await msg.answer("📡 Provayderni tanlang:", reply_markup=keyboard)
 
         except Exception as e:
-            print(f"[ERROR] API chaqiruvda xatolik: {e}")
+            print(f"[ERROR] {e}")
             await msg.answer("❌ Xatolik yuz berdi. Qayta urinib ko‘ring.")
 
-# Run
+@dp.callback_query(LocationStates.Provider, F.data.startswith("prov_"))
+async def show_tariffs(call: CallbackQuery, state: FSMContext):
+    await call.answer()
+    idx = int(call.data.split("_")[1])
+    data = await state.get_data()
+    provider = data["provider_data"][idx]
+
+    name = provider.get("provider_name", "Nomaʼlum")
+    tariflar = ""
+    for tarif in provider.get("provider_best", []):
+        tariflar += (
+            f"<b>{tarif.get('plan_name')}</b>\n"
+            f"🌐 Tezlik: {tarif.get('plan_speed')}\n"
+            f"💸 Narx: {tarif.get('plan_price')} so‘m\n"
+            f"📶 Limit: {tarif.get('plan_limit')}\n"
+            f"🌙 Tungi: {tarif.get('night_speed')}\n"
+            f"📡 Turi: {tarif.get('plan_type')}\n\n"
+        )
+    markup = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Provayderlar", callback_data="back_providers")]])
+    await call.message.edit_text(f"<b>📡 {name}</b>\n\n{tariflar}", reply_markup=markup, parse_mode="HTML")
+
+@dp.callback_query(F.data == "back_providers")
+async def back_to_providers(call: CallbackQuery, state: FSMContext):
+    await call.answer()
+    data = await state.get_data()
+    providers = data.get("provider_data", [])
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=prov.get("provider_name", "Nomaʼlum"), callback_data=f"prov_{i}")]
+            for i, prov in enumerate(providers)
+        ] + [[InlineKeyboardButton(text="🔙 Orqaga", callback_data="back_house")]]
+    )
+    await call.message.edit_text("📡 Provayderni tanlang:", reply_markup=keyboard)
+
+@dp.callback_query(F.data == "back_house")
+async def back_to_house(call: CallbackQuery, state: FSMContext):
+    await call.answer()
+    data = await state.get_data()
+    city, district, street = data["city"], data["district"], data["street"]
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[[KeyboardButton(text="🔙 Orqaga")]])
+    await state.set_state(LocationStates.House)
+    await call.message.answer("Iltimos, uy raqamini kiriting:", reply_markup=keyboard)
+
 async def main():
     await dp.start_polling(bot)
 
