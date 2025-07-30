@@ -33,7 +33,6 @@ class LocationStates(StatesGroup):
     House = State()
 
 # 🔄 Sahifalash uchun yordamchi
-
 def paginate_keyboard(items, state_key, page):
     start = page * PAGE_SIZE
     end = start + PAGE_SIZE
@@ -60,7 +59,6 @@ def paginate_keyboard(items, state_key, page):
 @dp.message(F.text == "/start")
 async def start(msg: Message, state: FSMContext):
     await state.clear()
-    print(f"[START] {msg.from_user.full_name} ({msg.from_user.id}) botni boshladi.")
     await state.set_state(LocationStates.City)
     await state.update_data(page=0)
     keyboard = paginate_keyboard(list(locations.keys()), "city", 0)
@@ -77,7 +75,6 @@ async def choose_district(msg: Message, state: FSMContext):
     elif msg.text == "⏮️ Oldingi":
         page -= 1
     elif msg.text in locations:
-        print(f"[CITY] {msg.from_user.id} - Shahar tanlandi: {msg.text}")
         await state.update_data(city=msg.text, page=0)
         await state.set_state(LocationStates.District)
         districts = list(locations[msg.text].keys())
@@ -108,7 +105,6 @@ async def choose_street(msg: Message, state: FSMContext):
     elif msg.text == "⏮️ Oldingi":
         page -= 1
     elif msg.text in locations[city]:
-        print(f"[DISTRICT] {msg.from_user.id} - Tuman tanlandi: {msg.text}")
         await state.update_data(district=msg.text, page=0)
         await state.set_state(LocationStates.Street)
         streets = list(locations[city][msg.text].keys())
@@ -140,13 +136,9 @@ async def choose_house(msg: Message, state: FSMContext):
     elif msg.text == "⏮️ Oldingi":
         page -= 1
     elif msg.text in locations[city][district]:
-        print(f"[STREET] {msg.from_user.id} - Ko‘cha tanlandi: {msg.text}")
         await state.update_data(street=msg.text)
         await state.set_state(LocationStates.House)
-        # Only show back button
-        keyboard = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[
-            [KeyboardButton(text="🔙 Orqaga")]
-        ])
+        keyboard = ReplyKeyboardMarkup(resize_keyboard=True, keyboard=[[KeyboardButton(text="🔙 Orqaga")]])
         await msg.answer("Iltimos, uy raqamini kiriting:", reply_markup=keyboard)
         return
     else:
@@ -165,7 +157,6 @@ async def check_provider(msg: Message, state: FSMContext):
         streets = list(locations[city][district].keys())
         keyboard = paginate_keyboard(streets, "street", 0)
         await state.set_state(LocationStates.Street)
-        print(f"[BACK] {msg.from_user.id} - Street bosqichiga qaytdi.")
         await msg.answer("Ko‘cha tanlang:", reply_markup=keyboard)
         return
 
@@ -175,11 +166,7 @@ async def check_provider(msg: Message, state: FSMContext):
     street = data["street"]
     house = msg.text
 
-    print(f"[HOUSE] {msg.from_user.id} - Uy raqami kiritildi: {house}")
-    print(f"[API] So‘rov yuborilmoqda: {city}, {district}, {street}, {house}")
-
     await msg.answer("🔍 Provayderlar qidirilmoqda...")
-    found_providers = []
 
     params = {
         "city": city,
@@ -191,25 +178,47 @@ async def check_provider(msg: Message, state: FSMContext):
     async with ClientSession() as session:
         try:
             async with session.get("https://internetbor.uz/api/v1/coverage-check/", params=params) as resp:
-                if resp.status == 200:
-                    res = await resp.json()
-                    for provider in res.get("providers", []):
-                        tariflar = "\n".join(
-                            f" - {tarif.get('plan_name')} | {tarif.get('plan_speed')} | {tarif.get('plan_price')} so'm"
-                            for tarif in provider.get("provider_best", [])
+                if resp.status != 200:
+                    await msg.answer("❌ API javobida xatolik. Qayta urinib ko‘ring.")
+                    return
+
+                res = await resp.json()
+                providers = res.get("providers", [])
+                if not providers:
+                    await msg.answer("❌ Hech qanday provayder topilmadi.")
+                    return
+
+                for provider in providers:
+                    name = provider.get("provider_name", "Nomaʼlum")
+                    logo = provider.get("provider_logo", None)
+
+                    tariflar = ""
+                    for tarif in provider.get("provider_best", []):
+                        nomi = tarif.get("plan_name", "—")
+                        tezlik = tarif.get("plan_speed", "—")
+                        narx = tarif.get("plan_price", "—")
+                        tur = tarif.get("plan_type", "—")
+                        tungi = tarif.get("night_speed", "—")
+                        limit = tarif.get("plan_limit", "—")
+
+                        tariflar += (
+                            f"<b>{nomi}</b>\n"
+                            f"🌐 Tezlik: <b>{tezlik}</b>\n"
+                            f"🌙 Tungi: <i>{tungi}</i>\n"
+                            f"💸 Narx: <code>{narx} so‘m/oy</code>\n"
+                            f"📶 Limit: {limit}\n"
+                            f"📡 Turi: {tur}\n\n"
                         )
-                        found_providers.append(f"📡 <b>{provider.get('provider_name')}</b>\n{tariflar}")
+
+                    header = f"<u>📡 <b>{name}</b></u>\n"
+                    if logo:
+                        header += f"🖼 <i>Logo:</i> <code>{logo}</code>\n\n"
+
+                    await msg.answer(header + tariflar, parse_mode="HTML")
+
         except Exception as e:
             print(f"[ERROR] API chaqiruvda xatolik: {e}")
             await msg.answer("❌ Xatolik yuz berdi. Qayta urinib ko‘ring.")
-            return
-
-    if found_providers:
-        print(f"[RESULT] {msg.from_user.id} uchun {len(found_providers)} ta provayder topildi.")
-        await msg.answer("\n\n".join(found_providers))
-    else:
-        print(f"[RESULT] {msg.from_user.id} uchun provayder topilmadi.")
-        await msg.answer("❌ Provayderlar topilmadi. Boshqa uy raqamini kiriting yoki 🔙 Orqaga qayting.")
 
 # Run
 async def main():
