@@ -213,7 +213,7 @@ async def show_tariffs(call: CallbackQuery, state: FSMContext):
             f"📶 Limit: {tarif.get('plan_limit')}\n"
             f"🌙 Tungi: {tarif.get('night_speed')}\n"
             f"📡 Turi: {tarif.get('plan_type')}\n\n"
-            f"<b>📡 {name}</b>\n\n{tariflar}<b>📞 Aloqa:</b> {telephone_number}"
+            f"<b>📞 Aloqa:</b> {telephone_number}"
 
         )
 
