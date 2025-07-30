@@ -22,13 +22,15 @@ with open("locations.json", "r", encoding="utf-8") as f:
 
 PAGE_SIZE = 10
 
+tg_username = "@sarkor_ceo"
+telephone_number = "+998909228887"
+
 class LocationStates(StatesGroup):
     City = State()
     District = State()
     Street = State()
     House = State()
     Provider = State()
-
 
 def paginate_keyboard(items, state_key, page):
     start = page * PAGE_SIZE
@@ -212,7 +214,21 @@ async def show_tariffs(call: CallbackQuery, state: FSMContext):
             f"🌙 Tungi: {tarif.get('night_speed')}\n"
             f"📡 Turi: {tarif.get('plan_type')}\n\n"
         )
-    markup = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Provayderlar", callback_data="back_providers")]])
+
+    markup = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✉️ Telegram orqali", url=f"https://t.me/{tg_username.lstrip('@')}")
+            ],
+            [
+                InlineKeyboardButton(text="📞 Qo‘ng‘iroq qilish", url=f"tel:{telephone_number}")
+            ],
+            [
+                InlineKeyboardButton(text="🔙 Provayderlar", callback_data="back_providers")
+            ]
+        ]
+    )
+
     await call.message.edit_text(f"<b>📡 {name}</b>\n\n{tariflar}", reply_markup=markup, parse_mode="HTML")
 
 @dp.callback_query(F.data == "back_providers")
