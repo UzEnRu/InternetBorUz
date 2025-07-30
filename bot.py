@@ -213,7 +213,8 @@ async def show_tariffs(call: CallbackQuery, state: FSMContext):
             f"📶 Limit: {tarif.get('plan_limit')}\n"
             f"🌙 Tungi: {tarif.get('night_speed')}\n"
             f"📡 Turi: {tarif.get('plan_type')}\n\n"
-            
+            f"<b>📡 {name}</b>\n\n{tariflar}<b>📞 Aloqa:</b> {telephone_number}"
+
         )
 
     markup = InlineKeyboardMarkup(
@@ -227,7 +228,6 @@ async def show_tariffs(call: CallbackQuery, state: FSMContext):
     ]
 )
 
-    text = f"<b>📡 {name}</b>\n\n{tariflar}<b>📞 Aloqa:</b> {telephone_number}"
     await call.message.edit_text(f"<b>📡 {name}</b>\n\n{tariflar}", reply_markup=markup, parse_mode="HTML")
 
 @dp.callback_query(F.data == "back_providers")
